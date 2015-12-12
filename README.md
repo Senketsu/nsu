@@ -20,8 +20,9 @@ Simply include nsu into your project and use these calls.
 Every call returns file path to newly made screenshot or empty string if it fails.
 
 **The main procedure**
-proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
-                   delay:int = 0, countDown: bool = false): string =
+
+`proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
+                   delay:int = 0, countDown: bool = false): string =`
 * @mode - NsuMode for screenshot [FULL, AREA,ACTIVE_WIN, SELECT_WIN]
 * @fileName - user specified filename (optional)
 * @savePath - user specified path to save into (optional)
@@ -29,6 +30,7 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
 * @countDown - To output countdow into stdout
 
 **Or you can call the convience procs**
+
 `proc nsu_active_win_ss*(fileName,savePath: string = "",delay: int = 0): string =`
 * Convience proc for active window screenshot. Optional fileName, savePath, delay parameters.
 
