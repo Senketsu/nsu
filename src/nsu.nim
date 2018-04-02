@@ -1,12 +1,12 @@
 import strutils, parseopt , os
-import nsu_types
+import private/nsu_types
 
 when defined(Windows):
- import nsu_win32
+ import private/nsu_win32
 else:
- import nsu_x11
+ import private/nsu_x11
 
-const VERSION = "v0.1.0"
+const VERSION = "v0.1.3"
 
 proc writeVersion() =
  echo "Nim Screenshot Utility [nsu] $1" % VERSION
@@ -44,7 +44,7 @@ proc yesOrNo(question: string): bool =
  echo question
  while true:
   let line = readLine(stdin)
-  let tlLine = line.toLower()
+  let tlLine = line.toLowerAscii()
   case tlLine
   of "y","yes":
    result = true

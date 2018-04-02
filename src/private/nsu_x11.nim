@@ -1,12 +1,12 @@
 import strutils, os, times
 import x, xlib, xutil
-import fix_lib/png
+import png
 import nsu_types
 
 var
  homeDir = getHomeDir()
 
-proc nsu_save_image(destPath: string,image: PXImage,width,height: cint): bool =
+proc nsu_save_image(destPath: string,image: PXImage,width,height: cuint): bool =
  result = true
  var
   fp: File
@@ -34,26 +34,18 @@ proc nsu_save_image(destPath: string,image: PXImage,width,height: cint): bool =
  if not result:
   return
 
- png_init_io (png_ptr, fp)
- png_set_IHDR (png_ptr, png_info_ptr, png_uint32(width), png_uint32(height),
+ png_init_io(png_ptr, fp)
+ png_set_IHDR(png_ptr, png_info_ptr, width, height,
          8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
          PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE)
 
- let title: cstring = "NSU_Screenshot"
- var
-  title_text: png_textp
- new(title_text)
-
- title_text.compression = -1
- title_text.key = "Title"
- title_text.text = title
- png_set_text(png_ptr, png_info_ptr, title_text, 1)
- png_write_info (png_ptr, png_info_ptr)
+ png_set_text(png_ptr, png_info_ptr, nil, 1)
+ png_write_info(png_ptr, png_info_ptr)
 
  for y in 0..height-1:
-   var png_row: seq[png_byte] = @[]
+   var png_row: seq[cuchar] = @[]
    for x in 0..width-1:
-    var pixel = XGetPixel(image,x,y)
+    var pixel = XGetPixel(image,cint(x),cint(y))
     let blue: cuchar = cuchar((pixel and blue_mask))
     let green: cuchar = cuchar((pixel and green_mask) shr 8)
     let red: cuchar = cuchar((pixel and red_mask) shr 16)
@@ -63,9 +55,9 @@ proc nsu_save_image(destPath: string,image: PXImage,width,height: cint): bool =
     png_row.add(blue)
     png_row.add(alpha)
 
-   png_write_row (png_ptr, png_row)
+   png_write_row(png_ptr,addr png_row[0]) ## ATTENTION
 
- png_write_end (png_ptr, nil)
+ png_write_end(png_ptr, nil)
  fp.close()
 
 
@@ -134,9 +126,7 @@ proc nsu_selWindowOrArea (isAreaSelection: bool): TSelVal =
  if not res == GrabSuccess:
   return
 
- # discard XAllowEvents(display, SyncPointer,CurrentTime)
  while not isDone:
-  # discard XFlush(display)
   discard XNextEvent(display,addr event)
   case event.theType
   of ButtonPress:
@@ -198,9 +188,6 @@ proc nsu_selWindowOrArea (isAreaSelection: bool): TSelVal =
  result.width = width
  result.height = height
  result.window = selWindow
- # echo "Start:\t x:$1\ty:$2" % [$start_x,$start_y]
- # echo "End:\t x:$1\ty:$2" % [$end_x,$end_y]
- # echo "$1" % repr(selWindow)
 
 proc nsu_genFilePath* (fileName,savePath: string): string =
  ## Generates full file path if not specified.
@@ -208,8 +195,12 @@ proc nsu_genFilePath* (fileName,savePath: string): string =
   var
    tStamp: string = ""
    iTimeNow: int = (int)getTime()
-  let timeNowUtc = getGMTime(fromSeconds(iTimeNow))
-  tStamp = format(timeNowUtc,"yyyy-MM-dd-HH'_'mm'_'ss")
+  when defined(deprecated):
+    let timeNowUtc = getGMTime(fromSeconds(iTimeNow))
+    tStamp = format(timeNowUtc,"yyyy-MM-dd-HH'_'mm'_'ss")
+  else:
+    let timeNowUtc = utc(fromUnix(iTimeNow))
+    tStamp = format(timeNowUtc,"yyyy-MM-dd-HH'_'mm'_'ss")
   result = joinPath(if savePath == "": homeDir else: savePath, "$1_$2.png" % [tstamp, "nsu"])
  else:
   result = joinPath(if savePath == "": homeDir else: savePath, fileName)
@@ -225,8 +216,7 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
  result = ""
 
  var
-  code = 0
-  width,height: cint = 0
+  width,height: cuint = 0
   image: PXImage
   gwa: TXWindowAttributes
   display: PDisplay = XOpenDisplay(nil)
@@ -257,22 +247,20 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
  of AREA, SELECT_WIN, ACTIVE_WIN:
   if selRes.useWindow:
    discard XGetWindowAttributes(display, selRes.window, addr gwa)
-   width = gwa.width
-   height = gwa.height
-   image = XGetImage(display,cast[TDrawable](selRes.window), 0,0 ,
-                     cuint(gwa.width), cuint(gwa.height), AllPlanes, cint(ZPixmap))
+   width = cuint(gwa.width)
+   height = cuint(gwa.height)
+   image = XGetImage(display,cast[TDrawable](selRes.window), 0,0 , width, height, AllPlanes, cint(ZPixmap))
   else:
    discard XGetWindowAttributes(display, root, addr gwa)
-   width = selRes.width
-   height = selRes.height
-   image = XGetImage(display,cast[TDrawable](root), selRes.start_x, selRes.start_y,
-                     cuint(selRes.width), cuint(selRes.height), AllPlanes, cint(ZPixmap))
+   width = cuint(selRes.width)
+   height = cuint(selRes.height)
+   image = XGetImage(display,cast[TDrawable](root), selRes.start_x, selRes.start_y, width, height, AllPlanes, cint(ZPixmap))
 
  of FULL:
   discard XGetWindowAttributes(display, root, addr gwa)
-  width = gwa.width
-  height = gwa.height
-  image = XGetImage(display,cast[TDrawable](root), 0,0 , cuint(width),cuint(height),AllPlanes, cint(ZPixmap))
+  width = cuint(gwa.width)
+  height = cuint(gwa.height)
+  image = XGetImage(display,cast[TDrawable](root), 0,0 , width,height,AllPlanes, cint(ZPixmap))
 
  else: return
 

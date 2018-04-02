@@ -1,6 +1,6 @@
 import strutils, os, times
-import windows
-import fix_lib/png
+import oldwinapi/windows
+import png
 import nsu_types
 
 
@@ -54,17 +54,23 @@ proc nsu_silentDelay(delay: int) =
 
 proc nsu_genFilePath* (fileName,savePath: string): string =
  ## Generates full file path if not specified.
+ ## If no path, save to attempt to save into home/pictures
+ var picturesPath = joinPath(homeDir,"Pictures")
  if fileName == "":
   var
    tStamp: string = ""
    iTimeNow: int = (int)getTime()
-  let timeNowUtc = getGMTime(fromSeconds(iTimeNow))
-  tStamp = format(timeNowUtc,"yyyy-MM-dd-HH'_'mm'_'ss")
-  result = joinPath(if savePath == "": homeDir else: savePath, "$1_$2.png" % [tstamp, "nsu"])
+  when defined(deprecated):
+    let timeNowUtc = getGMTime(fromSeconds(iTimeNow))
+    tStamp = format(timeNowUtc,"yyyy-MM-dd-HH'_'mm'_'ss")
+  else:
+    let timeNowUtc = utc(fromUnix(iTimeNow))
+    tStamp = format(timeNowUtc,"yyyy-MM-dd-HH'_'mm'_'ss")
+  result = joinPath(if savePath == "": picturesPath else: savePath, "$1_$2.png" % [tstamp, "nsu"])
  else:
-  result = joinPath(if savePath == "": homeDir else: savePath, fileName)
+  result = joinPath(if savePath == "": picturesPath else: savePath, fileName)
 
-proc nsu_save_image(destPath: string,image: HDC,width,height: cint): bool =
+proc nsu_save_image(destPath: string,image: HDC,width,height: cuint): bool =
  result = true
  var
   fp: File
@@ -88,26 +94,19 @@ proc nsu_save_image(destPath: string,image: HDC,width,height: cint): bool =
  if not result:
   return
 
- png_init_io (png_ptr, fp)
- png_set_IHDR (png_ptr, png_info_ptr, png_uint32(width), png_uint32(height),
+ png_init_io(png_ptr, fp)
+ png_set_IHDR(png_ptr, png_info_ptr, width, height,
          8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
          PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE)
 
- let title: cstring = "NSU_Screenshot"
- var
-  title_text: png_textp
- new(title_text)
 
- title_text.compression = -1
- title_text.key = "Title"
- title_text.text = title
- png_set_text(png_ptr, png_info_ptr, title_text, 1)
- png_write_info (png_ptr, png_info_ptr)
+ png_set_text(png_ptr, png_info_ptr, nil, 1)
+ png_write_info(png_ptr, png_info_ptr)
 
  for y in 0..height-1:
-   var png_row: seq[png_byte] = @[]
+   var png_row: seq[cuchar] = @[]
    for x in 0..width-1:
-    var pixel: COLORREF = GetPixel(image, x, y)
+    var pixel: COLORREF = GetPixel(image, cint(x), cint(y))
     let blue: cuchar = cast[cuchar](GetBValue(pixel))
     let green: cuchar = cast[cuchar](GetGValue(pixel))
     let red: cuchar = cast[cuchar](GetRValue(pixel))
@@ -117,9 +116,9 @@ proc nsu_save_image(destPath: string,image: HDC,width,height: cint): bool =
     png_row.add(blue)
     png_row.add(alpha)
 
-   png_write_row (png_ptr, png_row)
+   png_write_row(png_ptr,addr png_row[0]) ## ATTENTION
 
- png_write_end (png_ptr, nil)
+ png_write_end(png_ptr, nil)
  fp.close()
 
 
@@ -309,7 +308,7 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
   var msg: MSG
   while GetMessage( addr msg, NULL, 0, 0 ) > 0:
    discard TranslateMessage( addr msg )
-   discard DispatchMessage ( addr msg )
+   discard DispatchMessage( addr msg )
 
  of ACTIVE_WIN:
   curSelVal.window = GetForegroundWindow()
@@ -320,9 +319,9 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
   isButtonPressed = true
   discard ShowWindow(selWindow,SW_SHOW)
   var msg: MSG
-  while GetMessage ( addr msg, NULL, 0, 0 ) > 0:
+  while GetMessage( addr msg, NULL, 0, 0 ) > 0:
    discard TranslateMessage( addr msg )
-   discard DispatchMessage ( addr msg )
+   discard DispatchMessage( addr msg )
  else:
   return
 
@@ -367,7 +366,7 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
  else: return
 
  result = nsu_genFilePath(fileName,savePath)
- if not nsu_save_image(result,hCaptureDC,width,height):
+ if not nsu_save_image(result,hCaptureDC,cuint(width),cuint(height)):
   result = ""
 
  discard ReleaseDC(hDesktopWnd,hDesktopDC)
