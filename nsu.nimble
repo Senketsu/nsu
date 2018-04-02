@@ -1,5 +1,4 @@
 # Package
-name = "nsu"
 version = "0.1.3"
 author = "Senketsu"
 description = "A small screenshot library / utility for Windows & X11 based systems."
