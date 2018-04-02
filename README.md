@@ -94,19 +94,19 @@ Every call returns file path to newly made screenshot or empty string if it fail
 * @delay - Delay in seconds (useful only for FULL or ACTIVE_WIN mode screen shot) (optional) [max 15sec]
 * @countDown - To output countdow into stdout
 
-**Or you can call the convience procs**
+**Or you can call the convenience procs**
 
 `proc nsu_active_win_ss*(fileName,savePath: string = "",delay: int = 0): string =`
-* Convience proc for active window screenshot. Optional fileName, savePath, delay parameters.
+* Convenience proc for active window screenshot. Optional fileName, savePath, delay parameters.
 
 `proc nsu_select_win_ss*(fileName,savePath: string = "",delay: int = 0): string =`
-* Convience proc for selected window screenshot. Optional fileName, savePath, delay parameters.
+* Convenience proc for selected window screenshot. Optional fileName, savePath, delay parameters.
 
 `proc nsu_area_ss*(fileName,savePath: string = "",delay: int = 0): string =`
-* Convience proc for area(or selected window) screenshot. Optional fileName, savePath, delay parameters.
+* Convenience proc for area(or selected window) screenshot. Optional fileName, savePath, delay parameters.
 
 `proc nsu_full_ss*(fileName,savePath: string = "",delay: int = 0): string =`
-* Convience proc to full screenshot. Optional fileName, savePath, delay parameters.
+* Convenience proc to full screenshot. Optional fileName, savePath, delay parameters.
 
 
 ### Contact
