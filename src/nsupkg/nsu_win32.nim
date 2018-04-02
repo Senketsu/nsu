@@ -6,8 +6,6 @@ import nsu_types
 
 const
  NULL: HANDLE = 0
- FALSE = 0
- nsuClassName = "nsuWinClass"
 
 var
  selWindow: HWND
@@ -16,7 +14,6 @@ var
  curSelVal: TSelVal
  isVisibleWin: bool = false
  isButtonPressed: bool = false
- homeDir = getHomeDir()
 
 proc nsu_init_windows():HWND
 proc clear(val: var TSelVal)
@@ -55,6 +52,7 @@ proc nsu_silentDelay(delay: int) =
 proc nsu_genFilePath* (fileName,savePath: string): string =
  ## Generates full file path if not specified.
  ## If no path, save to attempt to save into home/pictures
+ var homeDir = getHomeDir()
  var picturesPath = joinPath(homeDir,"Pictures")
  if fileName == "":
   var
@@ -144,8 +142,6 @@ proc nsuRedrawSelection (hWnd: HWND, rect: RECT)=
 
 proc nsuWndProc (hWnd: HWND, uMsg: WINUINT, wParam: WPARAM, lParam: LPARAM): LRESULT {.stdcall.} =
  var
-  hdc: HDC
-  ps: PAINTSTRUCT
   rcClient: RECT
 
  case uMsg
@@ -233,7 +229,7 @@ proc nsu_init_windows():HWND =
   var
     wc: WNDCLASSEX
     hwnd: HWND
-    msg: MSG
+    nsuClassName = "nsuWinClass"
   result = NULL
   let hInstance = GetModuleHandle(nil)
 
@@ -270,7 +266,7 @@ proc nsu_init_windows():HWND =
 
   if hwnd == NULL:
     var err = GetLastError()
-    stdout.writeLine("[nsu] Failed to setup subwindow !")
+    stdout.writeLine("[nsu] Failed to setup subwindow ! $1" % [$err])
     return
   result = hwnd
 
@@ -285,7 +281,6 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
  result = ""
 
  var
-  code = 0
   width,height: cint = 0
   selWinRc: RECT
   hDesktopDC, hCaptureDC,hCustomDC: HDC

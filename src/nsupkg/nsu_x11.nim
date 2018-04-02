@@ -3,9 +3,6 @@ import x, xlib, xutil
 import png
 import nsu_types
 
-var
- homeDir = getHomeDir()
-
 proc nsu_save_image(destPath: string,image: PXImage,width,height: cuint): bool =
  result = true
  var
@@ -99,7 +96,7 @@ proc nsu_getActiveWindow (delay: int = 0):TWindow =
 proc nsu_selWindowOrArea (isAreaSelection: bool): TSelVal =
  var
   display: PDisplay = XOpenDisplay(nil)
-  root: TWindow = DefaultRootWindow(display)
+  root: TWindow 
   cursor = XCreateFontCursor(display,34)
   selWindow: TWindow
   start_x, start_y, end_x, end_y, width, height, x, y: cint = 0
@@ -107,7 +104,8 @@ proc nsu_selWindowOrArea (isAreaSelection: bool): TSelVal =
   gcVal: TXGCValues
   gc: TGc
   isDone,isButtonPressed: bool
-
+ {.gcsafe.}:
+  root = DefaultRootWindow(display)
  result.useWindow = false
  if isAreaSelection:
   gcVal.foreground = XWhitePixel(display, 0)
@@ -191,6 +189,8 @@ proc nsu_selWindowOrArea (isAreaSelection: bool): TSelVal =
 
 proc nsu_genFilePath* (fileName,savePath: string): string =
  ## Generates full file path if not specified.
+ var
+  homeDir = getHomeDir()
  if fileName == "":
   var
    tStamp: string = ""
@@ -220,9 +220,11 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
   image: PXImage
   gwa: TXWindowAttributes
   display: PDisplay = XOpenDisplay(nil)
-  root: TWindow = DefaultRootWindow(display)
+  root: TWindow
   selRes: TSelVal
 
+ {.gcsafe.}:
+  root = DefaultRootWindow(display)
  if delay > 0:
   if countDown:
    nsu_countDown(delay)

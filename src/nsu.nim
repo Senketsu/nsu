@@ -1,12 +1,12 @@
 import strutils, parseopt , os
-import private/nsu_types
+import nsupkg/nsu_types
 
 when defined(Windows):
- import private/nsu_win32
+ import nsupkg/nsu_win32
 else:
- import private/nsu_x11
+ import nsupkg/nsu_x11
 
-const VERSION = "v0.1.3"
+const VERSION = "v0.1.4"
 
 proc writeVersion() =
  echo "Nim Screenshot Utility [nsu] $1" % VERSION
