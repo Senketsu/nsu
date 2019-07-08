@@ -1,5 +1,5 @@
 import strutils, os, times
-import x, xlib, xutil
+import x11/x, x11/xlib, x11/xutil
 import png
 import nsu_types
 
