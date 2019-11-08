@@ -1,61 +1,28 @@
 import strutils, os, times
+import flippy
 import x11/x, x11/xlib, x11/xutil
-import png
 import nsu_types
 
-proc nsu_save_image(destPath: string,image: PXImage,width,height: cuint): bool =
- result = true
- var
-  fp: File
-  png_ptr: png_structp
-  png_info_ptr: png_infop
 
- let red_mask = image.red_mask
- let green_mask = image.green_mask
- let blue_mask = image.blue_mask
+proc nsu_save_image(destPath: string, pximage: PXImage, width, height: int): bool =
+  var image = newImage(width, height, 4)
 
- if not fp.open(destPath, fmWrite):
-  stderr.writeLine("***Error Save_Image: Could not open file for writing")
-  result = false
+  let red_mask = pximage.red_mask
+  let green_mask = pximage.green_mask
+  let blue_mask = pximage.blue_mask
 
- png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nil, nil, nil)
- if png_ptr == nil:
-  stderr.writeLine("***Error Save_Image: Could not allocate write struct")
-  result = false
+  for x in 0 ..< image.width:
+    for y in 0 ..< image.height:
+      var x11pixel = XGetPixel(pximage,cint(x),cint(y))
+      var pixel = image.getRgba(x, y)
+      pixel.r = uint8((x11pixel and red_mask) shr 16)
+      pixel.g = uint8((x11pixel and green_mask) shr 8)
+      pixel.b = uint8(x11pixel and blue_mask)
+      pixel.a = uint8(255)
+      image.putRgba(x, y, pixel)
 
- png_info_ptr = png_create_info_struct(png_ptr)
- if png_info_ptr == nil:
-  stderr.writeLine("***Error Save_Image: Could not allocate info struct")
-  result = false
-
- if not result:
-  return
-
- png_init_io(png_ptr, fp)
- png_set_IHDR(png_ptr, png_info_ptr, width, height,
-         8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
-         PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE)
-
- png_set_text(png_ptr, png_info_ptr, nil, 1)
- png_write_info(png_ptr, png_info_ptr)
-
- for y in 0..height-1:
-   var png_row: seq[cuchar] = @[]
-   for x in 0..width-1:
-    var pixel = XGetPixel(image,cint(x),cint(y))
-    let blue: cuchar = cuchar((pixel and blue_mask))
-    let green: cuchar = cuchar((pixel and green_mask) shr 8)
-    let red: cuchar = cuchar((pixel and red_mask) shr 16)
-    let alpha: cuchar = cuchar(255)
-    png_row.add(red)
-    png_row.add(green)
-    png_row.add(blue)
-    png_row.add(alpha)
-
-   png_write_row(png_ptr,addr png_row[0]) ## ATTENTION
-
- png_write_end(png_ptr, nil)
- fp.close()
+  image.save(destPath)
+  return true
 
 
 proc nsu_countDown(delay: int) =
@@ -90,13 +57,13 @@ proc nsu_getActiveWindow (delay: int = 0):TWindow =
 
 
  res = XGetInputFocus(display, addr actWind, addr revert_to)
- result = cast[TWindow](cast[culong](actWind)- 1)
+ result = cast[TWindow](cast[culong](actWind) - 1)
  # Fixes the off by one value
 
 proc nsu_selWindowOrArea (isAreaSelection: bool): TSelVal =
  var
   display: PDisplay = XOpenDisplay(nil)
-  root: TWindow 
+  root: TWindow
   cursor = XCreateFontCursor(display,34)
   selWindow: TWindow
   start_x, start_y, end_x, end_y, width, height, x, y: cint = 0
@@ -194,7 +161,7 @@ proc nsu_genFilePath* (fileName,savePath: string): string =
  if fileName == "":
   var
    tStamp: string = ""
-   iTimeNow: int = (int)getTime()
+   iTimeNow: int = getTime().toSeconds().toInt()
   when defined(deprecated):
     let timeNowUtc = getGMTime(fromSeconds(iTimeNow))
     tStamp = format(timeNowUtc,"yyyy-MM-dd-HH'_'mm'_'ss")
@@ -241,8 +208,6 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
   selRes.useWindow = true
  of SELECT_WIN:
   selRes = nsu_selWindowOrArea(false)
- else:
-  return
 
 
  case mode
@@ -264,9 +229,6 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
   height = cuint(gwa.height)
   image = XGetImage(display,cast[TDrawable](root), 0,0 , width,height,AllPlanes, cint(ZPixmap))
 
- else: return
-
  result = nsu_genFilePath(fileName,savePath)
- if not nsu_save_image(result,image,width,height):
+ if not nsu_save_image(result, image, width.int, height.int):
   result = ""
-
