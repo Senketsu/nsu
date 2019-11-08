@@ -1,6 +1,6 @@
 import strutils, os, times
-import oldwinapi/windows
-import png
+import flippy
+import winim
 import nsu_types
 
 
@@ -57,67 +57,46 @@ proc nsu_genFilePath* (fileName,savePath: string): string =
  if fileName == "":
   var
    tStamp: string = ""
-   iTimeNow: int = (int)getTime()
+   iTimeNow: int = getTime().toSeconds().toInt()
   when defined(deprecated):
     let timeNowUtc = getGMTime(fromSeconds(iTimeNow))
     tStamp = format(timeNowUtc,"yyyy-MM-dd-HH'_'mm'_'ss")
   else:
     let timeNowUtc = utc(fromUnix(iTimeNow))
-    tStamp = format(timeNowUtc,"yyyy-MM-dd-HH'_'mm'_'ss")
+    tStamp = timeNowUtc.format("yyyy-MM-dd-HH'_'mm'_'ss")
   result = joinPath(if savePath == "": picturesPath else: savePath, "$1_$2.png" % [tstamp, "nsu"])
  else:
   result = joinPath(if savePath == "": picturesPath else: savePath, fileName)
 
-proc nsu_save_image(destPath: string,image: HDC,width,height: cuint): bool =
- result = true
- var
-  fp: File
-  png_ptr: png_structp
-  png_info_ptr: png_infop
 
- if not fp.open(destPath, fmWrite):
-  stderr.writeLine("***Error Save_Image: Could not open file for writing")
-  result = false
+proc nsu_save_image(destPath: string, hdc: HDC, hBitmap: HBITMAP, width, height: int): bool =
+  var image = newImage(width, height, 4) 
 
- png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nil, nil, nil)
- if png_ptr == nil:
-  stderr.writeLine("***Error Save_Image: Could not allocate write struct")
-  result = false
+  # setup bmi structure
+  var mybmi: BITMAPINFO
+  mybmi.bmiHeader.biSize = int32 sizeof(mybmi)
+  mybmi.bmiHeader.biWidth = int32 width
+  mybmi.bmiHeader.biHeight = int32 height
+  mybmi.bmiHeader.biPlanes = 1
+  mybmi.bmiHeader.biBitCount = 32
+  mybmi.bmiHeader.biCompression = BI_RGB
+  mybmi.bmiHeader.biSizeImage = DWORD(width * height * 4.int32)
+  
+  # copy data from bmi structure to the flippy image
+  discard CreateDIBSection(hdc, addr mybmi, DIB_RGB_COLORS, cast[ptr pointer](unsafeAddr(image.data[0])), 0, 0)
+  discard GetDIBits(hdc, hBitmap, 0, height.UINT, cast[ptr pointer](unsafeAddr(image.data[0])), addr mybmi, DIB_RGB_COLORS)
 
- png_info_ptr = png_create_info_struct(png_ptr)
- if png_info_ptr == nil:
-  stderr.writeLine("***Error Save_Image: Could not allocate info struct")
-  result = false
+  # for some reason windows bitmaps are flipped? flip it back
+  image = image.flipVertical()
+  # for some reason windows uses BGR, convert it to RGB
+  for x in 0 ..< image.width:
+    for y in 0 ..< image.height:
+      var pixel = image.getRgba(x, y)
+      (pixel.r, pixel.g, pixel.b) = (pixel.b, pixel.g, pixel.r)
+      image.putRgba(x, y, pixel)
 
- if not result:
-  return
-
- png_init_io(png_ptr, fp)
- png_set_IHDR(png_ptr, png_info_ptr, width, height,
-         8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
-         PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE)
-
-
- png_set_text(png_ptr, png_info_ptr, nil, 1)
- png_write_info(png_ptr, png_info_ptr)
-
- for y in 0..height-1:
-   var png_row: seq[cuchar] = @[]
-   for x in 0..width-1:
-    var pixel: COLORREF = GetPixel(image, cint(x), cint(y))
-    let blue: cuchar = cast[cuchar](GetBValue(pixel))
-    let green: cuchar = cast[cuchar](GetGValue(pixel))
-    let red: cuchar = cast[cuchar](GetRValue(pixel))
-    let alpha: cuchar = cuchar(255)
-    png_row.add(red)
-    png_row.add(green)
-    png_row.add(blue)
-    png_row.add(alpha)
-
-   png_write_row(png_ptr,addr png_row[0]) ## ATTENTION
-
- png_write_end(png_ptr, nil)
- fp.close()
+  image.save(destPath)
+  return true
 
 
 
@@ -132,15 +111,14 @@ proc nsuRedrawSelection (hWnd: HWND, rect: RECT)=
  hOldBrush = (HBRUSH)SelectObject(hDC, GetStockObject(NULL_BRUSH))
 
  # discard SetROP2(hDC, R2_MASKPEN)
- discard Rectangle(hDC, rect.TopLeft.x, rect.TopLeft.y,
-   rect.BottomRight.x, rect.BottomRight.y)
+ discard Rectangle(hdc=hDC, left=rect.left, top=rect.top, right=rect.right, bottom=rect.bottom)
 
  discard DeleteObject(SelectObject(hDC, hOldPen))
  discard DeleteObject(SelectObject(hDC, hOldBrush))
  discard ReleaseDC(hWnd, hDC);
 
 
-proc nsuWndProc (hWnd: HWND, uMsg: WINUINT, wParam: WPARAM, lParam: LPARAM): LRESULT {.stdcall.} =
+proc nsuWndProc (hWnd: HWND, uMsg: UINT, wParam: WPARAM, lParam: LPARAM): LRESULT {.stdcall.} =
  var
   rcClient: RECT
 
@@ -152,24 +130,24 @@ proc nsuWndProc (hWnd: HWND, uMsg: WINUINT, wParam: WPARAM, lParam: LPARAM): LRE
   if isVisibleWin:
    discard ReleaseCapture()
    discard GetCursorPos(addr begPt)
-   rcSel.TopLeft.x = LOWORD(cast[LONG](lParam))
-   rcSel.TopLeft.y = HIWORD(cast[LONG](lParam))
-   rcSel.BottomRight.x = rcSel.TopLeft.x
-   rcSel.BottomRight.y = rcSel.TopLeft.y
+   rcSel.left = LONG(LOWORD(cast[LONG](lParam)))
+   rcSel.top = LONG(HIWORD(cast[LONG](lParam)))
+   rcSel.right = rcSel.left
+   rcSel.bottom = rcSel.top
 
    discard SetCapture(selWindow)
    isButtonPressed = true
 
  of WM_MOUSEMOVE:
   if isVisibleWin and isButtonPressed:
-   rcSel.BottomRight.x = LOWORD(cast[LONG](lParam))
-   rcSel.BottomRight.y = HIWORD(cast[LONG](lParam))
+   rcSel.right = LONG(LOWORD(cast[LONG](lParam)))
+   rcSel.bottom = LONG(HIWORD(cast[LONG](lParam)))
 
    discard GetClientRect(hWnd, addr rcClient)
-   if rcSel.BottomRight.x < 0: rcSel.BottomRight.x = 0
-   if rcSel.BottomRight.x > rcClient.BottomRight.x: rcSel.BottomRight.x = rcClient.BottomRight.x
-   if rcSel.BottomRight.y < 0: rcSel.BottomRight.y = 0
-   if rcSel.BottomRight.y > rcClient.BottomRight.y: rcSel.BottomRight.y = rcClient.BottomRight.y
+   if rcSel.right < 0: rcSel.right = 0
+   if rcSel.right > rcClient.right: rcSel.right = rcClient.right
+   if rcSel.bottom < 0: rcSel.bottom = 0
+   if rcSel.bottom > rcClient.bottom: rcSel.bottom = rcClient.bottom
    # discard InvalidateRect( hwnd, nil, 1 )
    nsuRedrawSelection(hWnd, rcSel)
 
@@ -233,7 +211,7 @@ proc nsu_init_windows():HWND =
   result = NULL
   let hInstance = GetModuleHandle(nil)
 
-  wc.cbSize = WINUINT(sizeof(WNDCLASSEX))
+  wc.cbSize = UINT(sizeof(WNDCLASSEX))
   wc.style = 0
   wc.lpfnWndProc = WNDPROC(nsuWndProc)
   wc.cbClsExtra    = 0
@@ -317,24 +295,23 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
   while GetMessage( addr msg, NULL, 0, 0 ) > 0:
    discard TranslateMessage( addr msg )
    discard DispatchMessage( addr msg )
- else:
-  return
+
 
  case mode
  of AREA, SELECT_WIN, ACTIVE_WIN:
   if curSelVal.useWindow:
 
    discard GetWindowRect(curSelVal.window, addr selWinRc)
-   width = selWinRc.BottomRight.x - selWinRc.TopLeft.x
-   height = selWinRc.BottomRight.y - selWinRc.TopLeft.y
+   width = selWinRc.right - selWinRc.left
+   height = selWinRc.bottom - selWinRc.top
    hDesktopWnd = GetDesktopWindow()
    hDesktopDC = GetDC(hDesktopWnd)
    hCustomDC = GetDC(curSelVal.window)
    hCaptureDC = CreateCompatibleDC(hCustomDC)
    hCaptureBitmap = CreateCompatibleBitmap(hCustomDC, width, height)
    discard SelectObject(hCaptureDC,hCaptureBitmap)
-   discard BitBlt(hCaptureDC, 0,0, width,height, hDesktopDC,
-    selWinRc.TopLeft.x, selWinRc.TopLeft.y, SRCCOPY) # selWinRc.TopLeft.x, selWinRc.TopLeft.y
+   discard BitBlt(hCaptureDC, 0,0, width, height, hDesktopDC,
+    selWinRc.left, selWinRc.top, SRCCOPY) # selWinRc.TopLeft.x, selWinRc.TopLeft.y
 
 
   else:
@@ -349,8 +326,10 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
        hDesktopDC, curSelVal.start_x, curSelVal.start_y, SRCCOPY )
 
  of FULL:
-  width = GetSystemMetrics(78)
-  height = GetSystemMetrics(79)
+  var devModeSettings: DEVMODE
+  discard EnumDisplaySettings(nil, ENUM_CURRENT_SETTINGS, addr devModeSettings )
+  width = devModeSettings.dmPelsWidth 
+  height = devmodeSettings.dmPelsHeight
   hDesktopWnd = GetDesktopWindow()
   hDesktopDC = GetDC(hDesktopWnd)
   hCaptureDC = CreateCompatibleDC(hDesktopDC)
@@ -358,10 +337,8 @@ proc nsu_take_ss*(mode: NsuMode, fileName: string = "", savePath: string = "",
   discard SelectObject(hCaptureDC,hCaptureBitmap)
   discard BitBlt(hCaptureDC, 0,0,width,height, hDesktopDC, 0,0,SRCCOPY )
 
- else: return
-
  result = nsu_genFilePath(fileName,savePath)
- if not nsu_save_image(result,hCaptureDC,cuint(width),cuint(height)):
+ if not nsu_save_image(result, hCaptureDC, hCaptureBitmap, width, height):
   result = ""
 
  discard ReleaseDC(hDesktopWnd,hDesktopDC)
