@@ -1,6 +1,6 @@
 
 when defined(Windows):
- from oldwinapi/windows import HWND
+ from winim import HWND
  type
   TSelVal* = tuple
    start_x, start_y, end_x, end_y: cint

@@ -7,4 +7,4 @@ srcDir = "src"
 bin = @["nsu"]
 
 # Dependencies
-requires "nim >= 0.17.2", "x11 >= 1.0.0", "oldwinapi >= 2.0.0", "png >= 0.2.0"
+requires "nim >= 0.17.2", "x11 >= 1.0.0", "winim >= 3.2.4", "flippy == 0.4.0"
